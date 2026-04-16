@@ -241,7 +241,7 @@ def show_job_changes(region_name: str, old_df: pd.DataFrame, new_df: pd.DataFram
     Compare old and new DataFrames by project and print which jobs changed,
     were added, or were removed, along with the specific column-level diffs.
     """
-    hour_cols = [c for c in new_df.columns if "Hours" in str(c)]
+    hour_cols = [c for c in new_df.columns if "Hours" in str(c) and not str(c).startswith("Estimated")]
     project_col = "project"
 
     if old_df.empty or project_col not in old_df.columns:
