@@ -272,8 +272,8 @@ def show_job_changes(region_name: str, old_df: pd.DataFrame, new_df: pd.DataFram
         new_row = new_df[new_df[project_col].astype(str) == proj].iloc[0]
         diffs = []
         for col in hour_cols:
-            old_val = float(old_row[col]) if col in old_df.columns else 0.0
-            new_val = float(new_row[col]) if col in new_df.columns else 0.0
+            old_val = round(float(old_row[col]) if col in old_df.columns else 0.0)
+            new_val = round(float(new_row[col]) if col in new_df.columns else 0.0)
             if old_val != new_val:
                 diffs.append(f"{col}: {old_val} → {new_val}")
         if diffs:
