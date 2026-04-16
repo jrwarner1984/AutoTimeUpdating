@@ -223,6 +223,86 @@ def df_fingerprint(df: pd.DataFrame) -> str:
     payload = df2.to_csv(index=False).encode("utf-8")
     return hashlib.md5(payload).hexdigest()
 
+def read_sheet_as_df(ws) -> pd.DataFrame:
+    """Read an openpyxl worksheet into a DataFrame using the first row as headers."""
+    if ws.max_row < 1:
+        return pd.DataFrame()
+    headers = [cell.value for cell in ws[1]]
+    if not any(h for h in headers):
+        return pd.DataFrame()
+    rows = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        rows.append(row)
+    return pd.DataFrame(rows, columns=headers)
+
+
+def show_job_changes(region_name: str, old_df: pd.DataFrame, new_df: pd.DataFrame):
+    """
+    Compare old and new DataFrames by project and print which jobs changed,
+    were added, or were removed, along with the specific column-level diffs.
+    """
+    hour_cols = [c for c in new_df.columns if "Hours" in str(c)]
+    project_col = "project"
+
+    if old_df.empty or project_col not in old_df.columns:
+        if not new_df.empty:
+            print(f"  [New data] {len(new_df)} project(s) written for the first time.")
+        return
+
+    old_df = old_df.copy()
+    new_df = new_df.copy()
+
+    # Normalize hour columns to float for comparison
+    for col in hour_cols:
+        if col in old_df.columns:
+            old_df[col] = pd.to_numeric(old_df[col], errors="coerce").fillna(0)
+        if col in new_df.columns:
+            new_df[col] = pd.to_numeric(new_df[col], errors="coerce").fillna(0)
+
+    old_projects = set(old_df[project_col].dropna().astype(str))
+    new_projects = set(new_df[project_col].dropna().astype(str))
+
+    added   = new_projects - old_projects
+    removed = old_projects - new_projects
+    common  = old_projects & new_projects
+
+    changed_jobs = []
+    for proj in sorted(common):
+        old_row = old_df[old_df[project_col].astype(str) == proj].iloc[0]
+        new_row = new_df[new_df[project_col].astype(str) == proj].iloc[0]
+        diffs = []
+        for col in hour_cols:
+            old_val = float(old_row[col]) if col in old_df.columns else 0.0
+            new_val = float(new_row[col]) if col in new_df.columns else 0.0
+            if old_val != new_val:
+                diffs.append(f"{col}: {old_val} → {new_val}")
+        if diffs:
+            changed_jobs.append((proj, diffs))
+
+    print(f"\n  ── Job Change Report: {region_name} ──")
+    if not added and not removed and not changed_jobs:
+        print("  No job-level changes detected.")
+        return
+
+    if added:
+        print(f"  NEW jobs ({len(added)}):")
+        for p in sorted(added):
+            print(f"    + {p}")
+
+    if removed:
+        print(f"  REMOVED jobs ({len(removed)}):")
+        for p in sorted(removed):
+            print(f"    - {p}")
+
+    if changed_jobs:
+        print(f"  CHANGED jobs ({len(changed_jobs)}):")
+        for proj, diffs in changed_jobs:
+            print(f"    ~ {proj}")
+            for d in diffs:
+                print(f"        {d}")
+    print()
+
+
 def finalize_workbook_for_shuttle(path: str, visible: bool = False):
     """
     Opens and saves the destination workbook in Excel to force:
@@ -320,6 +400,7 @@ def main():
         print(f"• {region_name} raw rows: {len(df_region)}")
 
         ws = dest_wb[sheet_name] if sheet_name in dest_wb.sheetnames else dest_wb.create_sheet(sheet_name)
+        prev_df = read_sheet_as_df(ws)
 
         if df_region.empty:
             print(f"• No rows for {region_name}. Clearing sheet '{sheet_name}'.")
@@ -346,6 +427,7 @@ def main():
             print(f"✓ {region_name}: unchanged (fingerprint match). Skipping update.")
             summary.append(f"{region_name}: unchanged")
         else:
+            show_job_changes(region_name, prev_df, combined)
             update_table(ws, combined)
             set_meta_value(meta_ws, key, fp)
             print(f"⚠ Update detected for {region_name}: wrote {len(combined)} rows.")
