@@ -22,7 +22,7 @@ DEST_SHEETS = {
 DISCIPLINES = ["Design Engineering", "Programming", "Graphics"]
 
 # Refresh timeout safeguard (seconds)
-REFRESH_TIMEOUT_SEC = 1800  # 30 minutes
+REFRESH_TIMEOUT_SEC = 1800  # 30 minutes (configurable)
 
 # =========================
 # EXCEL REFRESH (DETERMINISTIC)
